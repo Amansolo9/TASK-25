@@ -1,0 +1,16 @@
+.DS_Store
+.env
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+backend/staticfiles/
+frontend/node_modules/
+
+# Sensitive runtime artifacts (never version)
+deploy/certs/
+backend/media/
+backend/backups/
+
+# Keep structural placeholders only
+!backend/media/.gitkeep
+!backend/backups/.gitkeep

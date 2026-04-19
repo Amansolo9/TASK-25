@@ -1,0 +1,157 @@
+services:
+  db:
+    image: mysql:8.4
+    container_name: harborops-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-harborops}
+      MYSQL_USER: ${MYSQL_USER:-harborops}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-harborops_local_mysql_password_2026_dev_only}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-harborops_local_mysql_root_password_2026_dev_only}
+    ports:
+      - "3406:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u$$MYSQL_USER -p$$MYSQL_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: harborops-backend
+    restart: unless-stopped
+    environment:
+      APP_RUNTIME_PROFILE: ${APP_RUNTIME_PROFILE:-dev}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+      DJANGO_HTTPS_ENABLED: ${DJANGO_HTTPS_ENABLED:-true}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-django-insecure-harborops-local-2026-default-secret-key-please-change}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend,proxy}
+      DB_NAME: ${MYSQL_DATABASE:-harborops}
+      DB_USER: ${MYSQL_USER:-harborops}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-harborops_local_mysql_password_2026_dev_only}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-harborops_local_mysql_root_password_2026_dev_only}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-harborops_local_mysql_password_2026_dev_only}
+      DB_ADMIN_USER: ${DB_ADMIN_USER:-root}
+      DB_ADMIN_PASSWORD: ${DB_ADMIN_PASSWORD:-harborops_local_mysql_root_password_2026_dev_only}
+      DB_HOST: db
+      DB_PORT: 3306
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://localhost:8443}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://localhost:8443}
+      REQUEST_SIGNING_PREFIXES: ${REQUEST_SIGNING_PREFIXES:-/api/}
+      REQUEST_SIGNING_ALLOWLIST_PATHS: ${REQUEST_SIGNING_ALLOWLIST_PATHS:-/api/auth/login/,/api/auth/register/,/api/auth/captcha/challenge/}
+      SESSION_REPLAY_REQUIRE_HEADERS: ${SESSION_REPLAY_REQUIRE_HEADERS:-true}
+      APP_AES256_KEY_B64: ${APP_AES256_KEY_B64:-SGnm89C1aalGQJ3S3htY8X0GJZEfSVkrM/3gk4R2NY0=}
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-harborops-local-backup-passphrase-2026-dev-only}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; s=socket.create_connection(('localhost',8000),3); s.close()",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: harborops-frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://localhost:8443}
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  proxy:
+    image: caddy:2.10
+    container_name: harborops-proxy
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+
+  backup_scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: harborops-backup-scheduler
+    restart: unless-stopped
+    entrypoint: ["/app/scripts/nightly_backup_loop.sh"]
+    environment:
+      APP_RUNTIME_PROFILE: ${APP_RUNTIME_PROFILE:-dev}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-django-insecure-harborops-local-2026-default-secret-key-please-change}
+      DB_NAME: ${MYSQL_DATABASE:-harborops}
+      DB_USER: ${MYSQL_USER:-harborops}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-harborops_local_mysql_password_2026_dev_only}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-harborops_local_mysql_root_password_2026_dev_only}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-harborops_local_mysql_password_2026_dev_only}
+      DB_HOST: db
+      DB_PORT: 3306
+      APP_AES256_KEY_B64: ${APP_AES256_KEY_B64:-SGnm89C1aalGQJ3S3htY8X0GJZEfSVkrM/3gk4R2NY0=}
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-harborops-local-backup-passphrase-2026-dev-only}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_SCHEDULE_HOUR: ${BACKUP_SCHEDULE_HOUR:-2}
+      BACKUP_SCHEDULE_MINUTE: ${BACKUP_SCHEDULE_MINUTE:-0}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  offline_ingest_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: harborops-offline-ingest-worker
+    restart: unless-stopped
+    entrypoint: ["/app/scripts/offline_ingest_worker_loop.sh"]
+    environment:
+      DB_NAME: ${MYSQL_DATABASE:-harborops}
+      DB_USER: ${MYSQL_USER:-harborops}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-harborops_local_mysql_password_2026_dev_only}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-harborops_local_mysql_root_password_2026_dev_only}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-harborops_local_mysql_password_2026_dev_only}
+      DB_ADMIN_USER: ${DB_ADMIN_USER:-root}
+      DB_ADMIN_PASSWORD: ${DB_ADMIN_PASSWORD:-harborops_local_mysql_root_password_2026_dev_only}
+      DB_HOST: db
+      DB_PORT: 3306
+      APP_RUNTIME_PROFILE: ${APP_RUNTIME_PROFILE:-dev}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-django-insecure-harborops-local-2026-default-secret-key-please-change}
+      APP_AES256_KEY_B64: ${APP_AES256_KEY_B64:-SGnm89C1aalGQJ3S3htY8X0GJZEfSVkrM/3gk4R2NY0=}
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-harborops-local-backup-passphrase-2026-dev-only}
+      OFFLINE_INGEST_FOLDERS: ${OFFLINE_INGEST_FOLDERS:-/app/offline_dropzone}
+      OFFLINE_INGEST_INTERVAL_SECONDS: ${OFFLINE_INGEST_INTERVAL_SECONDS:-30}
+    volumes:
+      - ./offline_dropzone:/app/offline_dropzone
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+  caddy_data:
+  caddy_config:
