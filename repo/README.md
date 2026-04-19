@@ -268,15 +268,20 @@ Variance categories:
 
 ## Frontend Integration Tests
 
-Run the React integration suite and production build inside the frontend Docker container:
+Run the React test suite and production build inside the frontend Docker container. The full stack (`db`, `backend`, `proxy`) must be up first because the integration tests make real HTTPS calls — no fetch mocks, no canned responses.
 
 ```bash
+docker compose up -d --build
 docker compose run --rm frontend npm run lint
 docker compose run --rm frontend npm run test:run
 docker compose run --rm frontend npm run build
 ```
 
-The integration tests cover login + role workspace rendering and jobs dedupe workflow behavior.
+Test composition:
+
+- `src/hooks/domains/*.test.js` — pure domain/reducer unit tests.
+- `src/screens/*.test.jsx` — prop-driven React Testing Library render tests.
+- `src/realBackend.integration.test.js` — real-network integration suite. Every request is an actual HTTPS call through the Caddy proxy (`https://proxy:8443`) to the live Django backend: CSRF issuance, login/me/roles, trips RBAC, signed favorite create+delete round-trip, and unsigned-mutation rejection by the session signing middleware.
 
 All frontend tooling runs inside the Docker image; no local Node.js install is required.
 
