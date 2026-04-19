@@ -1,4 +1,4 @@
-https://localhost:8443 {
+https://localhost:8443, https://proxy:8443 {
     tls internal
 
     @api path /api/*

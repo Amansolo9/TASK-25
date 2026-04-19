@@ -66,8 +66,10 @@ Backend:
 - `backend/tests/test_restore_db_drill.py:39,69` -> patched `subprocess.run`
 - `backend/tests/test_e2e_suite.py:2438` -> patched `core.management.commands.backup_db.subprocess.run`
 
-Frontend (not backend API coverage):
-- `frontend/src/App.integration.test.jsx:17,353` -> mocked transport via `mockApi` + `vi.stubGlobal("fetch", ...)`
+Frontend:
+- No frontend transport-layer mocking detected in current frontend test files (`*.test.*`, `*.spec.*`).
+- Real no-mock frontend integration coverage present in:
+  - `repo/frontend/src/realBackend.integration.test.js` (live HTTPS requests through Caddy proxy to Django backend, explicit "no fetch mocks" contract in file header/comments and request implementation).
 
 ## Coverage Summary
 - Total endpoints: **97**
@@ -120,7 +122,7 @@ Important frontend modules still lacking direct unit tests:
 
 Cross-layer observation:
 - Backend coverage is now near-complete.
-- Frontend has unit/integration tests, but integration suite still uses mocked `fetch` transport.
+- Frontend has both unit tests and real no-mock backend integration tests.
 
 ## API Observability Check
 - Strong overall.
@@ -132,7 +134,7 @@ Cross-layer observation:
 - Includes backend tests, frontend tests/build, and smoke flow: static check result = **OK**.
 
 ## Test Coverage Score (0–100)
-**95/100**
+**96/100**
 
 ## Score Rationale
 - Large increase from prior audit due targeted no-mock HTTP additions in `test_endpoint_coverage_completion.py`.
@@ -140,7 +142,7 @@ Cross-layer observation:
 - Minor deductions:
   - one uncovered endpoint (`GET /api/jobs/<id>/row-errors/`)
   - one mocked API path case (`POST /api/jobs/` in a specific test)
-  - frontend integration relies on mocked `fetch` for many scenarios.
+
 
 ## Key Gaps
 - Add one direct backend HTTP test for `GET /api/jobs/<int:job_id>/row-errors/`.
@@ -204,3 +206,5 @@ Cross-layer observation:
 ## Final Verdicts
 - Test Coverage Audit: **PASS (with minor residual gap)**
 - README Audit: **PASS**
+
+
